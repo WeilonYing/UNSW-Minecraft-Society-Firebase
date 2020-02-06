@@ -29,10 +29,17 @@ sgClient.setDefaultRequest('baseUrl', 'https://api.sendgrid.com/');
 
 async function sendEmailToNewMember(user_id, data) {
     // Try UNSW email first
-    let to_email = data.unsw_email;
-    if (!to_email) {
+    let to_email = null;
+    let unsw_email = 'N/A';
+    if (data.unsw_id) {
+        to_email = `${data.unsw_id}@ad.unsw.edu.au`;
+        unsw_email = to_email;
+    } else {
         to_email = data.email;
     }
+    const minecraft_username = data.minecraft_username || '<none given>';
+    const discord_username = data.discord_username || '<none given>';
+
     console.log(to_email);
     const email_data = {
         "from": {
@@ -49,7 +56,9 @@ async function sendEmailToNewMember(user_id, data) {
                 "dynamic_template_data": {
                     "name": `${data.first_name} ${data.last_name}`,
                     "email": `${data.email}`,
-                    "minecraft_username": `${data.minecraft_username}`,
+                    "unsw_email": `${unsw_email}`,
+                    "minecraft_username": `${minecraft_username}`,
+                    "discord_username": `${discord_username}`,
                     "user_id": `${user_id}`,
                     "verification_code": `${data.verification_code}`
                 }
@@ -66,7 +75,7 @@ async function sendEmailToNewMember(user_id, data) {
 
     const response = await sgClient.request(email_request);
     console.log(
-        `Email sent to ${data.email} for user ${user_id}. `,
+        `Email sent to ${to_email} for user ${user_id}. `,
         `Got back response ${response}`);
 }
 
@@ -75,7 +84,7 @@ async function sendEmailToNewMember(user_id, data) {
  * @param first_name            Passed to verification email
  * @param last_name             Passed to verification email
  * @param minecraft_username    Passed to verification email
- * @param email OR unsw_email   So that we have an email to send to
+ * @param email OR unsw_id   So that we have an email to send to
  */
 exports.onNewMember = functions.region(default_region)
     .firestore
@@ -86,8 +95,8 @@ exports.onNewMember = functions.region(default_region)
         const verification_code = uuidv4();
         console.log(`Got document ${id}`);
 
-        if (!data.email && !data.unsw_email) {
-            throw new Error("Both fields 'email' and 'unsw_email' are empty!");
+        if (!data.email && !data.unsw_id) {
+            throw new Error("Both fields 'email' and 'unsw_id' are empty!");
         }
 
         // Add verification status and code to the document
