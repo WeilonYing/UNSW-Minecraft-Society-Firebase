@@ -3,10 +3,11 @@
  * they can join the society Discord server.
  *
  * This function requires the following Firebase config values to be set:
- * sendgrid.api_key     API key to access Sendgrid's email service
- * sendgrid.template_id Unique ID for the dynamic template to send the email through
- * sendgrid.from_email  Email that the user should reply to
- * sendgrid.from_name   The name of the sender (i.e. us)
+ * sendgrid.api_key             API key to access Sendgrid's email service
+ * sendgrid.template_id         Unique ID for the dynamic template to send the email through
+ * sendgrid.from_email          Email that the user should reply to
+ * sendgrid.from_name           The name of the sender (i.e. us)
+ * settings.default_collection  The collection to use by default
  * For more information, see here https://firebase.google.com/docs/functions/config-env
  */
 
@@ -17,7 +18,7 @@ const uuidv4 = require('uuid/v4');
 
 // Closest region to Sydney supporting cloud functions
 const default_region = 'asia-northeast1'; // Tokyo
-const default_collection = 'members-test';
+const default_collection = functions.config().settings.default_collection;
 admin.initializeApp(functions.config().firebase);
 
 const db = admin.firestore();
