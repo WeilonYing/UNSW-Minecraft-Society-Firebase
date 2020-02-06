@@ -27,6 +27,10 @@ const db = admin.firestore();
 sgClient.setApiKey(functions.config().sendgrid.api_key);
 sgClient.setDefaultRequest('baseUrl', 'https://api.sendgrid.com/');
 
+/* Send email with welcome and verification information to the user
+ * @param user_id   user's Firebase doc id
+ * @param data      user's Firebase doc data
+ */
 async function sendEmailToNewMember(user_id, data) {
     // Try UNSW email first
     let to_email = null;
@@ -79,7 +83,10 @@ async function sendEmailToNewMember(user_id, data) {
         `Got back response ${response}`);
 }
 
-/* Add verification code to new member and fire off an email
+/* Add verification code to new member and fire off an email.
+ * This function is triggered whenever there's a new entry
+ * in the Firestore collection.
+ *
  * The following must be provided in the doc data:
  * @param first_name            Passed to verification email
  * @param last_name             Passed to verification email
