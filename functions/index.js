@@ -8,6 +8,8 @@
  * sendgrid.from_email          Email that the user should reply to
  * sendgrid.from_name           The name of the sender (i.e. us)
  * settings.default_collection  The collection to use by default
+ * settings.whitelist_url       The URL to send the whitelist request to
+ * settings.auth_key            The key that the addUser HTTPS request must pass to its API header
  * For more information, see here https://firebase.google.com/docs/functions/config-env
  */
 
@@ -15,6 +17,7 @@ const admin = require('firebase-admin');
 const functions = require('firebase-functions');
 const sgClient = require('@sendgrid/client');
 const uuidv4 = require('uuid/v4');
+const request = require('request');
 
 // Closest region to Sydney supporting cloud functions
 const default_region = 'asia-northeast1'; // Tokyo
@@ -83,6 +86,27 @@ async function sendEmailToNewMember(user_id, data) {
         `Got back response ${response}`);
 }
 
+/* Send a whitelist request to Minecraft server
+ * Requires settings.whitelist_url (e.g. http://url.com:<port>)
+ * to be set in Firebase config, and the Autowhitelister plugin
+ * installed on the server.
+ */
+function whitelistMinecraftUsername(minecraft_username) {
+    request.post(
+        {
+            url: `${functions.config().settings.whitelist_url}`,
+            form: { "username": `${minecraft_username}` }
+        },
+        (err, response, body) => {
+            if (err) {
+                return console.error(err);
+            }
+            console.log('Whitelist request sent. Got back ', body);
+            return;
+        }
+    );
+}
+
 /* Add verification code to new member and fire off an email.
  * This function is triggered whenever there's a new entry
  * in the Firestore collection.
@@ -111,10 +135,81 @@ exports.onNewMember = functions.region(default_region)
         data.verification_code = verification_code;
         db.collection(default_collection).doc(id).set(data);
 
+        // Whitelist the user
+        if (data.minecraft_username) {
+            whitelistMinecraftUsername(data.minecraft_username);
+        }
+
         // Then fire off an email!
         await sendEmailToNewMember(id, data);
         return;
     });
+
+// HTTPS API endpoint to add a new member.
+// Content-Type should be application/json
+// Header should have this parameter:
+//     "Authorization": <string>
+//     "Content-Type": application/json
+// JSON should be like this:
+// {
+//     "timestamp": <string>,
+//     "first_name": <string>,
+//     "last_name": <string>,
+//     "email": <string>,
+//     "discord_username": <string>,
+//     "minecraft_username": <string>,
+//     "unsw_id": <string>
+// }
+//
+// Returns HTTP response (200 OK, or some error code)
+//
+exports.addUser = functions
+    .region(default_region)
+    .https.onRequest(async (req, res) => {
+        if (req.method !== 'PUT') {
+            return res.status(405).send('Incorrect method');
+        }
+        if (!req.header('Authorization')
+            || req.header('Authorization') !== functions.config().settings.auth_key) {
+            console.error('Unauthorized key sent: ', req.header('Authorization'));
+            return res.status(401).send('Unauthorized');
+        }
+
+        console.log('Received add user request. Request body: ', req.body);
+        const timestamp = req.body.timestamp;
+        const first_name = req.body.first_name;
+        const last_name = req.body.last_name;
+        const email = req.body.email;
+        const discord_username = req.body.discord_username || null;
+        const minecraft_username = req.body.minecraft_username || null;
+        const unsw_id = req.body.unsw_id || null;
+
+        try {
+            const addDoc = await db.collection(default_collection).add(
+                {
+                    timestamp: timestamp,
+                    first_name: first_name,
+                    last_name: last_name,
+                    email: email,
+                    discord_username: discord_username,
+                    minecraft_username: minecraft_username,
+                    unsw_id: unsw_id,
+                }
+            );
+            console.log('Added new doc with ID: ', addDoc.id);
+            return res.status(200).send('OK');
+        } catch (err) {
+            console.error(err);
+            return res.status(500).send('Internal server error');
+        }
+
+        /* WARNING: Remember to ensure that this function will always return a response!
+         * To test, uncomment the line below and run the linter. If linter says the line
+         * below is unreachable, you may re-comment it and continue to deploy
+         */
+        // return res.status(500).send('Internal server error');
+    });
+
 
 // HTTPS API endpoint to verify user.
 // Content-Type should be application/json
@@ -175,3 +270,55 @@ exports.verifyUser = functions
          */
         // return res.status(500).send('Internal server error');
     });
+
+// HTTPS API endpoint to search for a member by Discord ID
+// Content-Type should be application/json
+// Header should have this parameter:
+//     "Authorization": <string>
+//     "Content-Type": application/json
+// JSON should be like this:
+// {
+//     "discord_id": <string>,
+// }
+//
+// Returns HTTP response (200 OK, or some error code)
+//
+exports.findUserDiscord = functions
+    .region(default_region)
+    .https.onRequest(async (req, res) => {
+        if (req.method !== 'GET') {
+            return res.status(405).send('Incorrect method');
+        }
+        if (!req.header('Authorization')
+            || req.header('Authorization') !== functions.config().settings.auth_key) {
+            console.error('Unauthorized key sent: ', req.header('Authorization'));
+            return res.status(401).send('Unauthorized');
+        }
+
+        console.log('Received search user request. Request body: ', req.body);
+        const discord_id = req.body.discord_id || null;
+
+        try {
+            const query = db.collection(default_collection).where('discord_id', '==', discord_id);
+            const result = await query.get();
+
+            const payload = [];
+            if (!result.empty) {
+                result.forEach(doc => {
+                    payload.push(doc);
+                });
+            }
+            return res.json({ "results": payload });
+        } catch (err) {
+            console.error(err);
+            return res.status(500).send('Internal server error');
+        }
+
+        /* WARNING: Remember to ensure that this function will always return a response!
+         * To test, uncomment the line below and run the linter. If linter says the line
+         * below is unreachable, you may re-comment it and continue to deploy
+         */
+        // return res.status(500).send('Internal server error');
+    });
+
+
