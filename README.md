@@ -6,7 +6,7 @@ Firebase repo for UNSW Minecraft Society.
 Minecraft Society currently uses Google Firebase to automate and handle the process of welcoming new members
 and verifying their email addresses, including:
 - Adding a verification code
-- Sending the verification code to the user with instructions on how to use it
+- Sending a welcome email to the user, including the verification code with instructions on how to use it
 - Verifying that the verification code is correct through a HTTPS endpoint
 
 ## Setup
