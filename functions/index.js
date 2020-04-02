@@ -278,34 +278,46 @@ exports.verifyUser = functions
 //     "Content-Type": application/json
 // JSON should be like this:
 // {
-//     "discord_id": <string>,
+//     "discord_id": <string> <optional>,
+//     "minecraft_username": <string> <optional>
 // }
 //
 // Returns HTTP response (200 OK, or some error code)
 //
-exports.findUserDiscord = functions
+exports.findUser = functions
     .region(default_region)
     .https.onRequest(async (req, res) => {
-        if (req.method !== 'GET') {
+        if (req.method !== 'POST') {
             return res.status(405).send('Incorrect method');
         }
         if (!req.header('Authorization')
             || req.header('Authorization') !== functions.config().settings.auth_key) {
             console.error('Unauthorized key sent: ', req.header('Authorization'));
+            console.log('Correct key: ', functions.config().settings.auth_key);
             return res.status(401).send('Unauthorized');
         }
 
         console.log('Received search user request. Request body: ', req.body);
         const discord_id = req.body.discord_id || null;
+        const minecraft_username = req.body.minecraft_username || null;
+        if (!discord_id && !minecraft_username) {
+            return res.status(400).send('Bad request');
+        }
 
         try {
-            const query = db.collection(default_collection).where('discord_id', '==', discord_id);
+            let query = db.collection(default_collection);
+            if (discord_id) {
+                query = query.where('discord_id', '==', discord_id);
+            }
+            if (minecraft_username) {
+                query = query.where('minecraft_username', '==', minecraft_username);
+            }
             const result = await query.get();
 
             const payload = [];
             if (!result.empty) {
                 result.forEach(doc => {
-                    payload.push(doc);
+                    payload.push(doc.data());
                 });
             }
             return res.json({ "results": payload });
